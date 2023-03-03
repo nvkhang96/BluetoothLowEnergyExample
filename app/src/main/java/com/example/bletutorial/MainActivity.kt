@@ -1,43 +1,89 @@
 package com.example.bletutorial
 
+import android.Manifest
+import android.app.Activity
+import android.bluetooth.BluetoothAdapter
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Surface
-import androidx.compose.material.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import com.example.bletutorial.presentation.Navigation
 import com.example.bletutorial.ui.theme.BLETutorialTheme
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject
+    lateinit var bluetoothAdapter: BluetoothAdapter
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             BLETutorialTheme {
-                // A surface container using the 'background' color from the theme
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colors.background
-                ) {
-                    Greeting("Android")
-                }
+                Navigation(
+                    onBluetoothStateChanged = {
+                        showBluetoothDialog()
+                    }
+                )
             }
         }
     }
-}
 
-@Composable
-fun Greeting(name: String) {
-    Text(text = "Hello $name!")
-}
+    override fun onStart() {
+        super.onStart()
 
-@Preview(showBackground = true)
-@Composable
-fun DefaultPreview() {
-    BLETutorialTheme {
-        Greeting("Android")
+        val isBluetoothConnectPermissionGranted =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ) == PackageManager.PERMISSION_GRANTED
+            } else {
+                true
+            }
+
+        if (isBluetoothConnectPermissionGranted) {
+            showBluetoothDialog()
+        } else {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                requestPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            }
+        }
     }
+
+    private val requestPermissionLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { isGranted ->
+            if (isGranted) {
+                showBluetoothDialog()
+            }
+        }
+
+    private var isBluetoothDialogAlreadyShown = false
+    private fun showBluetoothDialog() {
+        if (!bluetoothAdapter.isEnabled) {
+            if (!isBluetoothDialogAlreadyShown) {
+                val enableBluetoothIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+                startBluetoothIntentForResult.launch(enableBluetoothIntent)
+                isBluetoothDialogAlreadyShown = true
+            }
+        }
+    }
+
+    private val startBluetoothIntentForResult =
+        registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            isBluetoothDialogAlreadyShown = false
+            if (result.resultCode != Activity.RESULT_OK) {
+                showBluetoothDialog()
+            }
+        }
 }
